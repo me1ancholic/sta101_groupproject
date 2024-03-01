@@ -1,0 +1,75 @@
+---
+title: "FLOE_notes"
+author: "Christina Chen"
+date: "2024-03-01"
+output: 
+  html_document: 
+    keep_md: true
+---
+## Set Up
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load libraries}
+library(tidyverse)
+library(devtools)
+library(edgeR)
+```
+
+```{r read files}
+sdiv <- read_tsv("../input/Christina_HiFi_Sdiv_Gene_Counts.tsv")
+sample <- read_csv("../input/Hydrothermal_Round_1_Sample_Descriptions.csv")
+```
+
+## Environment Information
+
+- sdiv = counts tsv file that was given
+- sample = sample cvs file that was given
+- dry_sample = sample csv with only dry condition, and without i02 and i03
+- dry_sdiv = counts tsv with only dry condition
+- dge_data = DGEList and calcNormFactors
+- normal_dry_sdiv = cpm of dge_data
+
+## Dry Samples
+
+```{r what samples were "Dry"}
+dry_sample <- sample %>%
+  filter(condition == "Dry") %>%
+  filter(sample != "i02") %>%
+  filter(sample != "i03") # had to remove these two samples because dry_sdiv did not have counts for these and it wouldn't let me move on with uneven number of sample sizes
+```
+
+- any sample from 01 to 05 was dry
+
+```{r only keep samples 01-05}
+dry_sdiv <- sdiv %>%
+  select(contains("01") | contains("02") | contains("03") | contains("04") | contains("05")) # would be curious to see how you would've done this part
+```
+
+```{r seeing if samples match between dry_sdiv and dry_sample}
+names(dry_sdiv)
+dry_sample$sample # is there a way to automatically check if these match? the way i made the dry_sdiv makes it harder to see if they are the same.
+```
+
+- at this point, there are 60 samples
+
+## Normalizing and Plotting
+
+```{r calculate normalization factors}
+dge_data <- DGEList(counts = dry_sdiv, # lab says this needs to be a matrix, but this worked. also i'm not sure if that changes anything or what the difference would be
+        group = dry_sample$group)
+
+dge_data <- calcNormFactors(dge_data, method = "TMM")
+dge_data$samples
+```
+
+```{r plotting dge_data}
+plotMDS(dge_data, method = "bcv") # I'm not sure if this was done correctly, most of then are clustered together by condition. (I assume, since it's hard to see with all the over lapping.) But there are a few that seem really spread out, like the j, b, g, m, e, h. Are those the ones that need to be removed? or do I need to plot CPM data to figure out which ones to remove?)
+```
+
+```{r extracing normalized data}
+normal_dry_sdiv <- cpm(dge_data, log = T)
+head(normal_dry_sdiv)
+```
