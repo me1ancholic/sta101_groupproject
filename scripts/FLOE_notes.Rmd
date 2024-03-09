@@ -4,7 +4,7 @@ author: "Christina Chen"
 date: "2024-03-01"
 output: 
   html_document: 
-    keep_md: true
+    self_contained: false
 ---
 ## Set Up
 
