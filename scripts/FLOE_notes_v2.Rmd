@@ -29,10 +29,11 @@ sample <- read_csv("../input/Hydrothermal_Round_1_Sample_Descriptions.csv")
 
 ## Environment Information
 
-- sdiv = counts tsv file that was given
+- sdiv = counts tsv file that was given, and later with non-normalized removed
 - sample = sample cvs file that was given
-- dry_sample = sample csv with only dry condition, and without i02 and i03
+- dry_sample = sample csv with only dry condition, and without i02 and i03 and non-normalized
 - dry_sdiv = counts tsv with only dry condition
+- cor_table = table of cor() data
 - dge_data = DGEList and calcNormFactors
 - normal_dry_sdiv = cpm of dge_data
 - normal_dry_sdiv_log = cpm of dge_data
@@ -56,7 +57,8 @@ dry_sample <- sample %>%
 
 ```{r only keep samples 01-05}
 dry_sdiv <- sdiv %>%
-  select(contains("01") | contains("02") | contains("03") | contains("04") | contains("05")) # would be curious to see how you would've done this part
+  select(contains("01") | contains("02") | contains("03") | contains("04") | contains("05"))
+# would be curious to see how you would've done this part
 ```
 
 ```{r only keep samples 01-05 method #2}
@@ -287,6 +289,8 @@ boxplot(normal_dry_sdiv_log)
 #                c01,                d01, d02,           e03,           g03, g04,                     k04, k05, l01, l04 weren't trimmed
 ```
 
+### trim and restart
+
 ```{r doing cor() again}
 cor_table <- dry_sdiv %>% select(sort(colnames(.))) %>% cor()
 cor_table %>% gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
@@ -381,6 +385,7 @@ plotDE <- function(genes, dge, sample.description) {
   pl + theme(axis.text.x  = element_text(angle=45, vjust=1,hjust=1))
 }
 # i don't know if this function works with what i have
+# try to fix
 ```
 
 ```{rusing bar plot function, eval=FALSE}
@@ -398,3 +403,172 @@ floe 2
 floe 3
 - Sdiv_ptg000001l_2274-R
 - no ptg000013l since that was added after the blast
+  - i gave it a name - use diff to compare lines or use coordinates: Sdiv_ptg000013l_FLOE3-R
+
+# Week 4
+
+### WEEK 4 FINISHED IN FLOE_notes_v3.Rmd
+
+- are these floe ones sig or notsig?
+- germination proportion - copy and paste what we already have to wet samples
+- will be set set/germination data
+- column_to_rownames() add it in before you do things, compare to lab to see how they did it
+      - do read.tsv instead maybe and no need for [-1] in code
+
+## Fixing Row Names
+
+```{r adding rownames attempt #1, eval=FALSE}
+sdiv1 <- read.tsv("../input/Christina_HiFi_Sdiv_Gene_Counts.tsv")
+# read.tsv is not a command
+```
+
+```{r adding rownames attempt #2, eval=FALSE}
+sdiv_rownames <- sdiv[[1]]
+sdiv2 <- sdiv[,-1]
+rownames(sdiv2) <- sdiv_rownames
+sdiv2
+# Warning: Setting row names on a tibble is deprecated.
+# this also does not work
+```
+
+```{r adding rownames attempt #3, eval=FALSE}
+sdiv3 <- sdiv
+rownames(sdiv3) <- sdiv3[[1]]
+# Warning: Setting row names on a tibble is deprecated.
+# this also does not work
+```
+
+```{r adding rownames attempt #4, eval=FALSE}
+sdiv4 <- read_tsv("../input/Christina_HiFi_Sdiv_Gene_Counts.tsv", col_names = TRUE, row.names(1))
+rownames(sdiv4)
+# this also does not work
+```
+
+```{r just selecting in the rownames column}
+dry_sdiv <- sdiv %>%
+  select(1, contains( "01") | contains("02") | contains("03") | contains("04") | contains("05")) %>%
+  rename("gene_id" = 1)
+head(dry_sdiv)
+# this is what was done in the lab
+```
+
+## Filtering out the Non-Normalized
+
+```{r filtering out things}
+dry_sdiv <- dry_sdiv %>%
+  select(-a01, -b02, -b04, -c01, -c02, -c03, -c05, -d01, -d02, -d03, -d04, -e03, -g01, -g02, -g03, -g04, -g05, -j03, -k01, -k03, -k04, -k05, -l01, -l04)
+```
+
+```{r making sure dry_sample matches}
+dry_sample <- dry_sample %>%
+  filter(sample != "a01",
+         sample != "b02",
+         sample != "b04",
+         sample != "c01",
+         sample != "c02",
+         sample != "c03",
+         sample != "c05",
+         sample != "d01",
+         sample != "d02",
+         sample != "d03",
+         sample != "d04",
+         sample != "e03",
+         sample != "g01",
+         sample != "g02",
+         sample != "g03",
+         sample != "g04",
+         sample != "g05",
+         sample != "j03",
+         sample != "k01",
+         sample != "k03",
+         sample != "k04",
+         sample != "k05",
+         sample != "l01",
+         sample != "l04")
+```
+
+```{r rearranging dry_sdiv names again}
+dry_sdiv <- dry_sdiv %>%
+  select(sort(colnames(dry_sdiv))) %>%
+  select(gene_id, everything())
+names(dry_sdiv)
+```
+
+```{r checking names again again}
+names(dry_sdiv[,-1]) == dry_sample$sample
+```
+## Normalizing and Plotting
+
+```{r calculate normalization factors again again}
+dge_data <- DGEList(counts = dry_sdiv[,-1],
+        samples=dry_sample,
+        group = dry_sample$group)
+
+dge_data <- calcNormFactors(dge_data, method = "TMM")
+dge_data$samples
+```
+
+```{r plotting dge_data again again}
+plotMDS(dge_data, method = "bcv")
+# why did this change so much
+```
+
+```{r extracing normalized data again again}
+normal_dry_sdiv <- cpm(dge_data)
+normal_dry_sdiv_log <- cpm(dge_data, log = T)
+```
+
+```{r boxplots again again}
+boxplot(dry_sdiv[,-1])
+boxplot(normal_dry_sdiv)
+boxplot(normal_dry_sdiv_log)
+```
+
+```{r doing cor() again}
+cor_table <- dry_sdiv %>% select(-gene_id) %>% cor()
+cor_table %>% gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
+```
+
+## Calculating Dispersion Factors (with trimming)
+
+```{r making a design matrix again}
+design <- model.matrix(~ population, data = dry_sample)
+rownames(design) <- dry_sample$sample.description
+design
+```
+
+```{r estimate dispersion: common again}
+dge_data <- estimateGLMCommonDisp(dge_data, design, verbose = TRUE)
+# Disp = 0.24255 , BCV = 0.4925 
+```
+
+```{r estimate dispersion: trended again}
+dge_data <- estimateGLMTrendedDisp(dge_data, design)
+```
+
+```{r estimate dispersion: tagwise again}
+dge_data <- estimateGLMTagwiseDisp(dge_data, design)
+```
+
+```{r plotting biological coefficent of variation and average log CPM again}
+plotBCV(dge_data) # trend looks better
+```
+
+## Find Differentially Expressed Genes
+
+```{r full model again}
+fit <- glmFit(dge_data, design)
+```
+
+```{r checking coefficient names}
+colnames(design[,-1])
+```
+
+```{r finding differentially expressed genes again}
+dry_lrt <- glmLRT(fit, coef = colnames(design[,-1]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(dry_lrt)
+```
+

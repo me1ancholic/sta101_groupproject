@@ -23,4 +23,4 @@
 
 10. There was missing information on ptg000013l in the gff file. Added gene, exon, and CDS to the file.
 
-11. Now working on Differential Gene Expression from RNAseq. See scripts folder.
+11. Now working on Differential Gene Expression from RNAseq (Lab on May 23, 2023. See scripts folder.
