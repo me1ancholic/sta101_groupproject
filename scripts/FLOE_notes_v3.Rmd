@@ -29,6 +29,7 @@ sample <- read_csv("../input/Hydrothermal_Round_1_Sample_Descriptions.csv")
 - sample = sample cvs file that was given
 - dry_sample = sample csv with only dry condition, and without i02 and i03 and non-normalized
 - dry_sdiv = counts tsv with only dry condition
+- dry_sdiv_matrix = made into a matrix for rownames
 - dge_data = DGEList and calcNormFactors
 - normal_dry_sdiv = cpm of dge_data
 - normal_dry_sdiv_log = cpm of dge_data
@@ -47,6 +48,7 @@ dry_sdiv <- sdiv %>%
   select(sort(colnames(.))) %>%
   select(gene_id, everything())
 dry_sdiv
+# ended up figuring out that i could do column_to_rownames()
 ```
 
 ```{r retaining sample descriptions to match dry_sdiv}
@@ -79,6 +81,7 @@ dry_sample <- sample %>%
          sample != "l01",
          sample != "l04")
 dry_sample
+# how to filter with a c()?
 ```
 
 ```{r checking names match}
@@ -116,7 +119,7 @@ dge_data$samples
 
 ```{r}
 plotMDS(dge_data, method = "bcv")
-# ... why does it look like that, so different from v2?
+# why does it look so different from v2?
 ```
 
 ## Extract Normalized Data
@@ -182,8 +185,6 @@ topTags(dry_lrt)
 
 ```{r summarise number of differentially expressed genes again}
 summary(decideTestsDGE(dry_lrt, p.value=0.01))
-# why does it not show up or down, only sig or notsig
-# is there a way to separate the populations or do we want them grouped together
 ```
 
 ```{r extract genes with a FDR < 0.01 (could also use 0.05) and save to a file}
@@ -218,9 +219,10 @@ plotDE <- function(genes, dge, sample.description) {
 
 ## Looking at FLOEs
 
-```{r}
+```{r are they significant}
 DEgene_dry_all %>%
-  filter(row.names == "Sdiv_ptg000004l_1566-R")
+  rownames_to_column("rowname") %>%
+  filter(rowname == "Sdiv_ptg000004l_1566-R" | rowname == "Sdiv_ptg000005l_1254-R" | rowname == "Sdiv_ptg000009l_0928-R" | rowname == "Sdiv_ptg000010l_1994-R" | rowname == "Sdiv_ptg000001l_2274-R" | rowname == "Sdiv_ptg000013l_FLOE3-R")
 ```
 
 

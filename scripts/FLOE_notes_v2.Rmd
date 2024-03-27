@@ -411,7 +411,7 @@ floe 3
 
 - are these floe ones sig or notsig?
 - germination proportion - copy and paste what we already have to wet samples
-- will be set set/germination data
+- will be sent set/germination data
 - column_to_rownames() add it in before you do things, compare to lab to see how they did it
       - do read.tsv instead maybe and no need for [-1] in code
 
@@ -444,12 +444,19 @@ rownames(sdiv4)
 # this also does not work
 ```
 
+```{r adding rownames attempt #5, eval=FALSE}
+sdiv5 <- sdiv %>%
+  rename("rowname" = 1) %>%
+  column_to_rownames()
+# this did work
+```
+
 ```{r just selecting in the rownames column}
 dry_sdiv <- sdiv %>%
   select(1, contains( "01") | contains("02") | contains("03") | contains("04") | contains("05")) %>%
   rename("gene_id" = 1)
 head(dry_sdiv)
-# this is what was done in the lab
+# this is what the one in the lab looked like
 ```
 
 ## Filtering out the Non-Normalized
