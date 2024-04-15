@@ -2,11 +2,14 @@
 title: "FLOE_notes"
 author: "Christina Chen"
 date: "2024-03-01"
-output: 
-  html_document: 
-    self_contained: false
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
 ---
-## Set Up
+
+# Set Up
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -16,6 +19,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(devtools)
 library(edgeR)
+library(shiny)
 ```
 
 ```{r read files}
@@ -25,12 +29,20 @@ sample <- read_csv("../input/Hydrothermal_Round_1_Sample_Descriptions.csv")
 
 ## Environment Information
 
-- sdiv = counts tsv file that was given
+- sdiv = counts tsv file that was given, and later with non-normalized removed
 - sample = sample cvs file that was given
-- dry_sample = sample csv with only dry condition, and without i02 and i03
+- dry_sample = sample csv with only dry condition, and without i02 and i03 and non-normalized
 - dry_sdiv = counts tsv with only dry condition
+- cor_table = table of cor() data
 - dge_data = DGEList and calcNormFactors
 - normal_dry_sdiv = cpm of dge_data
+- normal_dry_sdiv_log = cpm of dge_data
+- sample_names = names of samples with names(dry_sdiv)
+- design = matrix of design conditions
+- fit = glmFit of dge_data and design
+- dry_lrt = glmLRT of fit and coefficient of all populations
+
+# Week 1
 
 ## Dry Samples
 
@@ -45,7 +57,13 @@ dry_sample <- sample %>%
 
 ```{r only keep samples 01-05}
 dry_sdiv <- sdiv %>%
-  select(contains("01") | contains("02") | contains("03") | contains("04") | contains("05")) # would be curious to see how you would've done this part
+  select(contains("01") | contains("02") | contains("03") | contains("04") | contains("05"))
+# would be curious to see how you would've done this part
+```
+
+```{r only keep samples 01-05 method #2}
+dry_sdiv_jm <- sdiv %>%
+  select(matches("0[1-5]"))
 ```
 
 ```{r seeing if samples match between dry_sdiv and dry_sample}
@@ -53,23 +71,547 @@ names(dry_sdiv)
 dry_sample$sample # is there a way to automatically check if these match? the way i made the dry_sdiv makes it harder to see if they are the same.
 ```
 
+```{r checking for matching names}
+#If we just want to see if the same items are in each:
+setequal(names(dry_sdiv), dry_sample$sample)
+#TRUE
+
+#or for true equivalency
+identical(names(dry_sdiv), dry_sample$sample)
+# FALSE!
+
+#Why? not in same order
+names(dry_sdiv) == dry_sample$sample
+```
+
+
 - at this point, there are 60 samples
 
 ## Normalizing and Plotting
 
 ```{r calculate normalization factors}
 dge_data <- DGEList(counts = dry_sdiv, # lab says this needs to be a matrix, but this worked. also i'm not sure if that changes anything or what the difference would be
+                    
+# Looks like they updated it so that it can take a data frame
+
+        samples=dry_sample, #Not really needed but I went ahead and added this
         group = dry_sample$group)
 
 dge_data <- calcNormFactors(dge_data, method = "TMM")
-dge_data$samples
+dge_data$samples # could've used this too see if the first column and the "sample" column matches
 ```
 
 ```{r plotting dge_data}
 plotMDS(dge_data, method = "bcv") # I'm not sure if this was done correctly, most of then are clustered together by condition. (I assume, since it's hard to see with all the over lapping.) But there are a few that seem really spread out, like the j, b, g, m, e, h. Are those the ones that need to be removed? or do I need to plot CPM data to figure out which ones to remove?)
 ```
 
+^^ remove based on CPM
+
 ```{r extracing normalized data}
-normal_dry_sdiv <- cpm(dge_data, log = T)
-head(normal_dry_sdiv)
+normal_dry_sdiv <- cpm(dge_data)
+normal_dry_sdiv_log <- cpm(dge_data, log = T)
 ```
+
+# Week 2
+
+## Things I missed last time, and do I need to go back and do them?
+- histogram of dry samples to see if normalization is needed (see "Trying to to Histograms" below)
+- lab tells you to retain genes with > 10 reads in >= 3 samples, I did not do this
+- doing pairs() or cor() (see "Pairs and Cors" below)
+
+## Trying to do Histograms
+
+```{r storing sample names}
+sample_names <- names(dry_sdiv)
+```
+ 
+```{r trying for loops in R, eval=FALSE}
+for (names in c("a01", "a02")) { 
+    g <- ggplot(dry_sdiv, aes(x = names)) +
+          geom_histogram() +
+          scale_x_log10()
+    print(g)
+} # I haven't done for loops like this before, so I'm not sure how to do this in a for loop, but the manual way seems long and tedious
+```
+
+```{r using ai to make a for loop, eval=FALSE}
+# fix the for loop above to output multiple graphs
+# (i used ai to autocomplete the following code and it still doesn't work)
+for (i in 1:length(sample_names)) {
+  g <- ggplot(dry_sdiv, aes(x = sample_names[i])) +
+          geom_histogram() +
+          scale_x_log10()
+  print(g)
+}
+```
+
+```{r shiny app instead, eval=FALSE}
+ui <- fluidPage(
+  
+  selectInput("x", "Select Sample", choices = names(dry_sdiv), selected = "a01"),
+  hr(),
+  plotOutput("plot")
+  
+)
+
+server <- function(input, output, session) {
+  
+  output$plot <- renderPlot({
+    ggplot(data = dry_sdiv, aes_string(x = input$x)) +
+     geom_histogram() +
+     scale_x_log10()
+  })
+  
+  session$onSessionEnded(stopApp)
+  
+}
+
+shinyApp(ui, server)
+```
+
+##  Boxplots
+
+```{r boxplots}
+boxplot(dry_sdiv)
+boxplot(normal_dry_sdiv)
+boxplot(normal_dry_sdiv_log) # is this how you want the box plot?
+# is this the plot we use to trim out the ones that didn't normalize well? if so, not sure what to look for here.
+# in the normal one: there are a couple that still have very high counts
+# in the log one: a01 seem the only one that is majorly different. other kinda different ones: g01, l01, k03, c05
+```
+
+## Pairs and Cors
+
+```{r doing pairs(), eval=FALSE}
+dry_sdiv %>%
+  head(1000) %>%
+  pairs() # file margins too large 
+```
+
+```{r doing cor()}
+cor_table <- dry_sdiv %>% select(sort(colnames(.))) %>% cor()
+cor_table %>% gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
+# theoretically, all the ones that are the same letter are the most correlated. so there would be 5x5 rectangles of yellow that go down diagonally. if you look at the "m" box at the very bottom, they are very correlated.
+```
+
+## Calculating Dispersion Factors (without trimming)
+
+```{r making a design matrix}
+design <- model.matrix(~ population, data = dry_sample) # they are all "dry" so I didn't need to do "population + condition" right?
+rownames(design) <- dry_sample$sample.description
+design
+```
+
+```{r estimate dispersion: common}
+dge_data <- estimateGLMCommonDisp(dge_data, design, verbose = TRUE)
+# Disp = 1.26946 , BCV = 1.1267 
+```
+
+```{r estimate dispersion: trended}
+dge_data <- estimateGLMTrendedDisp(dge_data, design)
+```
+
+```{r estimate dispersion: tagwise}
+dge_data <- estimateGLMTagwiseDisp(dge_data, design)
+```
+
+```{r plotting biological coefficent of variation and average log CPM}
+plotBCV(dge_data) # why does trend look like that. shouldn't it start much higher and go down?
+```
+
+## Find Differentially Expressed Genes
+
+```{r full model}
+fit <- glmFit(dge_data, design)
+```
+
+```{r finding differentially expressed genes}
+dry_lrt <- glmLRT(fit, coef = "populationCAAN2") # nothing overlaps on the matrix so i'm not sure if this does anything. should this be done with all samples, not just dry samples?
+```
+
+```{r view the differeentially expressed genes}
+topTags(dry_lrt)
+```
+
+```{r summarise number of differentially expressed genes}
+summary(decideTestsDGE(dry_lrt, p.value=0.01))
+```
+
+# Week 3
+
+## Things to do
+
+- figure out if edgeR automatically matches sample names (it does not)
+- sort dry_sdiv columns to match dry_sample
+- do everything again but without the samples that didn't normalize
+  - drop samples (see what john dropped)
+  - calculate dispersion factors
+  - find differentially expressed genes
+    - get p values
+    - get log 2 counts of floe genes
+  
+
+```{r rearranging dry_sdiv names}
+dry_sdiv <- dry_sdiv %>% select(sort(colnames(dry_sdiv)))
+names(dry_sdiv)
+```
+
+```{r checking names again}
+names(dry_sdiv) == dry_sample$sample
+```
+
+## Normalizing and Plotting
+
+```{r calculate normalization factors again}
+dge_data <- DGEList(counts = dry_sdiv,
+        samples=dry_sample,
+        group = dry_sample$group)
+
+dge_data <- calcNormFactors(dge_data, method = "TMM")
+dge_data$samples
+```
+
+```{r plotting dge_data again}
+plotMDS(dge_data, method = "bcv")
+```
+
+```{r extracing normalized data again}
+normal_dry_sdiv <- cpm(dge_data)
+normal_dry_sdiv_log <- cpm(dge_data, log = T)
+```
+
+```{r boxplots again again}
+boxplot(dry_sdiv)
+boxplot(normal_dry_sdiv)
+boxplot(normal_dry_sdiv_log)
+# the ones that look different/have a median near 0
+# a01, b02, b04, c01, c02, c03, c05, d01, d02, d03, d04, e03, g01, g02, g03, g04, g05, j03, k01, k03, k04, k05, l01, l04
+#                c01,                d01, d02,           e03,           g03, g04,                     k04, k05, l01, l04 weren't trimmed
+```
+
+### trim and restart
+
+```{r doing cor() again}
+cor_table <- dry_sdiv %>% select(sort(colnames(.))) %>% cor()
+cor_table %>% gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
+```
+
+## Calculating Dispersion Factors (without trimming)
+
+```{r making a design matrix again}
+design <- model.matrix(~ population, data = dry_sample)
+rownames(design) <- dry_sample$sample.description
+design
+```
+
+```{r estimate dispersion: common again}
+dge_data <- estimateGLMCommonDisp(dge_data, design, verbose = TRUE)
+# Disp = 0.58844 , BCV = 0.7671 
+```
+
+```{r estimate dispersion: trended again}
+dge_data <- estimateGLMTrendedDisp(dge_data, design)
+```
+
+```{r estimate dispersion: tagwise again}
+dge_data <- estimateGLMTagwiseDisp(dge_data, design)
+```
+
+```{r plotting biological coefficent of variation and average log CPM again}
+plotBCV(dge_data) # trend looks better
+```
+
+## Find Differentially Expressed Genes
+
+```{r full model again}
+fit <- glmFit(dge_data, design)
+```
+
+```{r checking coefficient names}
+colnames(design[,-1])
+```
+
+```{r finding differentially expressed genes again}
+dry_lrt <- glmLRT(fit, coef = colnames(design[,-1]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(dry_lrt)
+```
+
+### What topTags shows
+
+- logFC = log2 fold-change in expression, so populationCAAN2 (gene 20946) has 1.31, which means that gene is expressed 2^1.31 (or 2.48) more. if it is  a negative, it is less.
+      - between intercept and a model without each population?
+- logCPM = average expression across all samples
+- LR = likeihood ratio (L(full model)/L(small model))
+- PValue = unadjusted p value
+- FDR = false discovery rate (p value adjusted for multiple testing)
+
+```{r summarise number of differentially expressed genes again}
+summary(decideTestsDGE(dry_lrt, p.value=0.01))
+# why does it not show up or down, only sig or notsig
+# is there a way to separate the populations or do we want them grouped together
+```
+
+```{r extract genes with a FDR < 0.01 (could also use 0.05) and save to a file}
+DEgene_dry <- topTags(dry_lrt, n = Inf, p.value = 0.01)$table # what is n = Inf for
+write.csv(DEgene_dry,"../output/DEgenes_dry.csv")
+```
+
+```{r or if you want to keep all of them}
+DEgene_dry_all <- topTags(dry_lrt, n = Inf, p.value = 1)$table
+write.csv(DEgene_dry_all,"../output/DEgenes_dry_all.csv")
+```
+
+```{r view of csv}
+read_csv("../output/DEgenes_dry.csv")
+```
+
+```{r bar plot function, eval=FALSE}
+plotDE <- function(genes, dge, sample.description) {
+  require(ggplot2)
+  tmp.data <- t(log2(cpm(dge[genes,])+1))
+  tmp.data <- tmp.data %>%
+    as.data.frame() %>%
+    rownames_to_column("sample") %>%
+    left_join(sample.description,by="sample")
+  tmp.data <- tmp.data %>%
+    pivot_longer(cols=starts_with("Bra"), values_to = "log2_cpm", names_to = "gene")    # this line
+  pl <- ggplot(tmp.data,aes(x=gt,y=log2_cpm,fill=trt))                                  # this line
+  pl <- pl + facet_wrap( ~ gene)
+  pl <- pl + ylab("log2(cpm)") + xlab("genotype")
+  pl <- pl + geom_boxplot()
+  pl + theme(axis.text.x  = element_text(angle=45, vjust=1,hjust=1))
+}
+# i don't know if this function works with what i have
+# try to fix
+```
+
+```{rusing bar plot function, eval=FALSE}
+plotDE(rownames(DEgene_dry)[1:9], dge_data, sample)
+```
+
+floe 1
+- Sdiv_ptg000004l_1566-R
+- Sdiv_ptg000005l_1254-R
+
+floe 2
+- Sdiv_ptg000009l_0928-R
+- Sdiv_ptg000010l_1994-R
+
+floe 3
+- Sdiv_ptg000001l_2274-R
+- no ptg000013l since that was added after the blast
+  - i gave it a name - use diff to compare lines or use coordinates: Sdiv_ptg000013l_FLOE3-R
+
+# Week 4
+
+- are these floe ones sig or notsig?
+- germination proportion - copy and paste what we already have to wet samples
+- will be sent set/germination data
+- column_to_rownames() add it in before you do things, compare to lab to see how they did it
+      - do read.tsv instead maybe and no need for [-1] in code
+
+```{r retaining dry sdiv ones that have been normalized}
+dry_sdiv <- sdiv %>%
+  select(1, contains( "01") | contains("02") | contains("03") | contains("04") | contains("05")) %>%
+  rename("gene_id" = 1) %>%
+  select(-a01, -b02, -b04, -c01, -c02, -c03, -c05, -d01, -d02, -d03, -d04, -e03, -g01, -g02, -g03, -g04, -g05, -j03, -k01, -k03, -k04, -k05, -l01, -l04) %>%
+  select(sort(colnames(.))) %>%
+  select(gene_id, everything())
+dry_sdiv
+# ended up figuring out that i could do column_to_rownames()
+```
+
+```{r retaining sample descriptions to match dry_sdiv}
+dry_sample <- sample %>%
+  filter(condition == "Dry") %>%
+  filter(sample != "i02",
+         sample != "i03",
+         sample != "a01",
+         sample != "b02",
+         sample != "b04",
+         sample != "c01",
+         sample != "c02",
+         sample != "c03",
+         sample != "c05",
+         sample != "d01",
+         sample != "d02",
+         sample != "d03",
+         sample != "d04",
+         sample != "e03",
+         sample != "g01",
+         sample != "g02",
+         sample != "g03",
+         sample != "g04",
+         sample != "g05",
+         sample != "j03",
+         sample != "k01",
+         sample != "k03",
+         sample != "k04",
+         sample != "k05",
+         sample != "l01",
+         sample != "l04")
+dry_sample
+# how to filter with a c()?
+```
+
+```{r}
+to_remove = c("i02", "i03", "a01", "b02", "b04", "c01", "c02", "c03", "c05", "d01", "d02", "d03", "d04", "e03", "g01", "g02", "g03", "g04", "g05", "j03", "k01", "k03", "k04", "k05", "l01", "l04")
+sample %>%
+  filter(condition == "Dry") %>%
+  filter(!(sample %in% to_remove))
+```
+
+```{r checking names match}
+names(dry_sdiv[,-1]) == dry_sample$sample
+```
+
+## Cor Table
+
+```{r doing cor()}
+dry_sdiv %>%
+  select(-gene_id) %>%
+  cor() %>%
+  gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
+```
+
+## Calculate Normalization Factrs
+
+```{r making a matrix}
+dry_sdiv_matrix <- dry_sdiv %>%
+  select(-gene_id) %>%
+  as.matrix()
+rownames(dry_sdiv_matrix) <- dry_sdiv$gene_id
+```
+
+```{r calculating normalization factors}
+dge_data <- DGEList(counts = dry_sdiv_matrix,
+                    group = dry_sample$group,
+                    samples = dry_sample)
+
+dge_data <- calcNormFactors(dge_data, method = "TMM")
+dge_data$samples
+```
+
+## Plotting BCV
+
+```{r}
+plotMDS(dge_data)
+# why does it look so different from v2?
+```
+
+## Extract Normalized Data
+
+```{r extract normalized data}
+dry_sdiv_normal <- cpm(dge_data)
+dry_sdiv_normal_log <- cpm(dge_data, log = T)
+```
+
+```{r boxplots of normalized data}
+boxplot(dry_sdiv_normal)
+boxplot(dry_sdiv_normal_log)
+```
+
+## Calculate Dispersion Factors & Estimate Dispersions
+
+```{r make a model matrix}
+design <- model.matrix(~ population, data = dry_sample)
+rownames(design) <- dry_sample$sample.description
+design
+```
+
+```{r estimate dispersion: common}
+dge_data <- estimateGLMCommonDisp(dge_data, design, verbose = TRUE)
+# Disp = 0.24255 , BCV = 0.4925 
+```
+
+```{r estimate dispersion: trended}
+dge_data <- estimateGLMTrendedDisp(dge_data, design)
+```
+
+```{r estimate dispersion: tagwise}
+dge_data <- estimateGLMTagwiseDisp(dge_data, design)
+```
+
+```{r plotting biological coefficent of variation and average log CPM}
+plotBCV(dge_data)
+# trend looks better
+```
+
+## Find Differentially Expressed Genes
+
+```{r full model}
+fit <- glmFit(dge_data, design)
+```
+
+```{r finding differentially expressed genes again}
+dry_lrt <- glmLRT(fit, coef = colnames(design[,-1]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(dry_lrt)
+```
+
+### What topTags Shows
+
+- logFC = log2 fold-change in expression, so populationCAAN2 (gene 20946) has 1.31, which means that gene is expressed 2^1.31 (or 2.48) more. if it is  a negative, it is less.
+      - between intercept and a model without each population?
+- logCPM = average expression across all samples
+- LR = likeihood ratio (L(full model)/L(small model))
+- PValue = unadjusted p value
+- FDR = false discovery rate (p value adjusted for multiple testing)
+
+```{r summarise number of differentially expressed genes again}
+summary(decideTestsDGE(dry_lrt, p.value=0.01))
+```
+
+```{r extract genes with a FDR < 0.01 (could also use 0.05) and save to a file}
+DEgene_dry <- topTags(dry_lrt, n = Inf, p.value = 0.01)$table # what is n = Inf for
+write.csv(DEgene_dry,"../output/DEgenes_dry.csv")
+```
+
+```{r or if you want to keep all of them}
+DEgene_dry_all <- topTags(dry_lrt, n = Inf, p.value = 1)$table
+write.csv(DEgene_dry_all,"../output/DEgenes_dry_all.csv")
+```
+
+## Box Plot Function
+
+```{r box plot function}
+plotDE <- function(genes, dge, sample.description) {
+  require(ggplot2)
+  tmp.data <- t(log2(cpm(dge[genes,])+1))
+  tmp.data <- tmp.data %>%
+    as.data.frame() %>%
+    rownames_to_column("sample") %>%
+    left_join(sample.description,by="sample")
+  tmp.data <- tmp.data %>%
+    pivot_longer(cols=starts_with("Sdiv"), values_to = "log2_cpm", names_to = "gene")
+  pl <- ggplot(tmp.data,aes(x=population,y=log2_cpm))
+  pl <- pl + facet_wrap( ~ gene)
+  pl <- pl + ylab("log2(cpm)") + xlab("genotype")
+  pl <- pl + geom_boxplot()
+  pl + theme(axis.text.x  = element_text(angle=45, vjust=1,hjust=1))
+}
+```
+
+## Looking at FLOEs
+
+```{r are they significant}
+DEgene_dry_all %>%
+  rownames_to_column("rowname") %>%
+  filter(rowname == "Sdiv_ptg000004l_1566-R" | rowname == "Sdiv_ptg000005l_1254-R" | rowname == "Sdiv_ptg000009l_0928-R" | rowname == "Sdiv_ptg000010l_1994-R" | rowname == "Sdiv_ptg000001l_2274-R" | rowname == "Sdiv_ptg000013l_FLOE3-R")
+```
+
+
+```{r using box plot function}
+# FLOE1
+plotDE(c("Sdiv_ptg000004l_1566-R", "Sdiv_ptg000005l_1254-R"), dge_data, dry_sample)
+# FLOE2
+plotDE(c("Sdiv_ptg000009l_0928-R", "Sdiv_ptg000010l_1994-R"), dge_data, dry_sample)
+# FLOE3
+plotDE(c("Sdiv_ptg000001l_2274-R", "Sdiv_ptg000013l_FLOE3-R"), dge_data, dry_sample)
+```
+
