@@ -42,13 +42,11 @@ sample <- read_csv("../input/Hydrothermal_Round_1_Sample_Descriptions.csv")
 
 ```{r retaining specific wet samples}
 wet_sample <- sample %>%
-  filter(condition == "24 hr 20˚ L wp0") %>%
-  filter(sample != "i9x") %>%
-  filter(sample != "i9b")
+  filter(condition == "24 hr 20˚ D wp0")
 wet_sample
 ```
 
-```{r retaining dry sdiv ones that have been normalized}
+```{r retaining wet sdiv ones that have been normalized}
 wet_sdiv <- sdiv %>%
   select(1, wet_sample$sample) %>%
   rename("gene_id" = 1) %>%
@@ -68,8 +66,7 @@ wet_sdiv %>%
   select(-gene_id) %>%
   cor() %>%
   gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
-# a and b are highly correlated
-# i, j, and k are odd
+# i and k are highly correlated
 ```
 
 ## Calculate Normalization Factors
@@ -94,7 +91,7 @@ dge_data$samples
 
 ```{r plotting BCV}
 plotMDS(dge_data)
-# a and b overlap again
+# looks mostly normal, k28 and i27 a little odd
 ```
 
 ## Extract Normalized Data
@@ -107,16 +104,14 @@ wet_sdiv_normal_log <- cpm(dge_data, log = T)
 ```{r boxplots of normalized data}
 boxplot(wet_sdiv_normal)
 boxplot(wet_sdiv_normal_log)
-# odd ones: i07, j06, j09, j10, k07, l06
+# odd ones: i26, i27, i29
+# maybe: f26, k26, m30
 ```
 
 ## Removal of Non-normalized
 
 ```{r removing the non-normalized}
-to_remove <- c("i07", "j06", "j09", "j10", "k07", "l06", "d07", "g09", "i08", "i10", "k09", "l09", "m07")
-# looks like john retained l06
-# added some more to be removed: "d07", "g09", "i08", "i10", "k09", "l09", "m07"
-# john retained all of these
+to_remove <- c("f26", "i26", "i27", "i29", "k26", )
 wet_sample <- wet_sample %>%
   filter(!(sample %in% to_remove))
 wet_sample
@@ -139,8 +134,7 @@ wet_sdiv %>%
   select(-gene_id) %>%
   cor() %>%
   gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
-# a and b are highly correlated
-# i, j, and k area is still odd, but some of them were removed
+# looks better, but still the same
 ```
 
 ## Calculate Normalization Factors Again
@@ -165,6 +159,7 @@ dge_data$samples
 
 ```{r plotting BCV again}
 plotMDS(dge_data)
+# only k28 odd
 ```
 
 ## Extract Normalized Data Again
@@ -177,8 +172,7 @@ wet_sdiv_normal_log <- cpm(dge_data, log = T)
 ```{r boxplots of normalized data again}
 boxplot(wet_sdiv_normal)
 boxplot(wet_sdiv_normal_log)
-# more variation
-# pulled more since we have so many replicates, may have more confusion/errors by keeping them in. results due to poor rna extraction
+# less replicates, should we pull the other three?
 ```
 
 ## Calculate Dispersion Factors & Estimate Dispersions
@@ -191,8 +185,7 @@ design
 
 ```{r estimate dispersion: common}
 dge_data <- estimateGLMCommonDisp(dge_data, design, verbose = TRUE)
-# Disp = 0.18392 , BCV = 0.4289
-# Disp = 0.1024 , BCV = 0.32 
+# Disp = 0.3078 , BCV = 0.5548
 ```
 
 ```{r estimate dispersion: trended}
@@ -205,6 +198,7 @@ dge_data <- estimateGLMTagwiseDisp(dge_data, design)
 
 ```{r plotting biological coefficent of variation and average log CPM}
 plotBCV(dge_data)
+# looks bumpy?
 ```
 
 ## Find Differentially Expressed Genes
@@ -272,12 +266,12 @@ DEgene_wet_all %>%
 ```{r using box plot function}
 # FLOE1
 plotDE(c("Sdiv_ptg000004l_1566-R", "Sdiv_ptg000005l_1254-R"), dge_data, wet_sample)
+# none in STGL2 for ptg5
 
 # FLOE2
 plotDE(c("Sdiv_ptg000009l_0928-R", "Sdiv_ptg000010l_1994-R"), dge_data, wet_sample)
-# also looks very similar to dry samples
 
 # FLOE3
 plotDE(c("Sdiv_ptg000001l_2274-R", "Sdiv_ptg000013l_FLOE3-R"), dge_data, wet_sample)
-# same case as dry for the CACO1 and CAIN2 populations
+# nothing for ptg13
 ```

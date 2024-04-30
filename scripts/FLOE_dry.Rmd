@@ -285,7 +285,7 @@ cor_floe <- cor_floe %>%
 cor_floe
 ```
 
-```{r correlation between floe expression and germination}
+```{r correlation between floe expression and germination attempt #1}
 # this is where I graphed it, but I'm not sure how you derived information from this graph, since it's in comparison to CAAN1
 # I put lines in to show which colors/genes are which
 cor_floe %>%
@@ -294,7 +294,7 @@ cor_floe %>%
   geom_line()
 ```
 
-```{r}
+```{r correlation table}
 # I also tried to do a correlation heat map, but I don't think this is was what we're going for
 cor_floe2 <- DEgene_dry_all %>%
   rownames_to_column("rowname") %>%
@@ -313,7 +313,7 @@ cor_floe2 %>%
   gplots::heatmap.2(Rowv=FALSE, Colv=FALSE, dendrogram="none", trace = "none", col=viridis::viridis(25, begin=.25), margins=c(7,8))
 ```
 
-```{r}
+```{r correlation between floe expression and germination attempt #2}
 # next, I used cpm() and log2( + 1) on the counts data, kept only the FLOE genes, and averaged out the replicates.
 # I then averaged out the germData and joined them together
 dry_sdiv_normal_log2 <- log2(cpm(dge_data) + 1)
@@ -339,15 +339,18 @@ cor_floe2 <- dry_sdiv_normal_log2 %>%
          STGL3 = mean(c(j01, j02, j04, j05)),
          STIN = mean(c(k02)),
          STPO1 = mean(c(l02, l03, l05)),
-         STTO.BH = mean(c(m01 ,m02, m03, m04, m05))) %>%
-  select(rowname, CAAN1, CAAN2, CACO1, CAIN2, STBR3, STDI, STGL1, STGL2, STGL3, STIN, STPO1, STTO.BH) %>%
-  pivot_longer(cols = CAAN1:STTO.BH,
+         STTO_BH = mean(c(m01 ,m02, m03, m04, m05))) %>%
+  select(rowname, CAAN1, CAAN2, CACO1, CAIN2, STBR3, STDI, STGL1, STGL2, STGL3, STIN, STPO1, STTO_BH) %>%
+  pivot_longer(cols = CAAN1:STTO_BH,
                names_to = "population",
-               values_to = "log2cpm")
+               values_to = "log2cpm") %>%
+  rename(gene_id = rowname)
 
 germData2 <- germData %>%
   group_by(population) %>%
-  summarise(cumulative_prop_germ = mean(cumulative_prop_germ))
+  summarise(cumulative_prop_germ = mean(cumulative_prop_germ)) %>%
+  filter(population != "STDR2") %>%
+  mutate(population = str_replace(population, "-", "_"))
 
 cor_floe2 <- cor_floe2 %>%
   full_join(germData2)
@@ -355,23 +358,36 @@ cor_floe2 <- cor_floe2 %>%
 cor_floe2
 ```
 
-```{r}
+```{r correlation between floe expression and germination attempt #3}
 # then i graphed the proportion of germination against the log2cpm
 # ptg13l looks bad since we don't have the whole picture with that one
 # the lines are there to show them apart
-# I'm not sure if this was what we're trying to look for, especially since I'm not seeing any correlation
+# I'm not sure if this was what we're trying to look for, especially since the values vary so much for each gene
 # You can kind of see that lower log2cpm has higher germination in graph 2, but I'm not sure if that is significant
+# I think part of the confusion is what data i should be putting into the graph with regards to expression level
 cor_floe2 %>%
-  ggplot(aes(x = cumulative_prop_germ, y = log2cpm, color = rowname)) +
+  ggplot(aes(x = cumulative_prop_germ, y = log2cpm, color = gene_id)) +
   geom_point() + 
-  geom_line()
+  facet_wrap(~ gene_id, scales = "free_y") +
+    geom_smooth(method = lm, alpha = 0)
 
 cor_floe2 %>%
   ggplot(aes(x = cumulative_prop_germ, y = log2cpm)) +
   geom_point() + 
   geom_smooth(method = lm, alpha = 0)
+
+lm(cor_floe2$log2cpm ~ cor_floe2$cumulative_prop_germ)
 ```
 
+```{r correlation with nested values}
+cor_floe2 %>%
+  ungroup() %>%
+  nest(.by=gene_id) %>% # separate observations by rowname and put them into separate tibbles
+  mutate(cor_test = map(data, ~ cor.test(.$log2cpm, .$cumulative_prop_germ) )) %>% # make a new column and use the command cor.test on two columns in the tibbles
+  mutate(glance = map(cor_test,  broom::glance)) %>% # take the cor.test results and make them readable and put them in a tibble in a new column called "glance"
+  unnest(glance) %>% # add the tibble from the column "glance" to the end of the tibble
+  arrange(p.value)
+```
 
 
 
