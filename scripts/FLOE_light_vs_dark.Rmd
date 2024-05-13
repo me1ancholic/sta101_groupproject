@@ -14,6 +14,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load libraries}
 library(tidyverse)
 library(devtools)
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("edgeR")
 library(edgeR)
 ```
 
@@ -38,7 +42,9 @@ compare_sample <- compare_sample %>%
   mutate(sample.description = str_replace(sample.description, "24 hr 20˚ L wp0", "Light")) %>%
   mutate(sample.description = str_replace(sample.description, "24 hr 20˚ D wp0", "Dark")) %>%
   mutate(condition = str_replace(condition, "24 hr 20˚ L wp0", "Light")) %>%
-  mutate(condition = str_replace(condition, "24 hr 20˚ D wp0", "Dark"))
+  mutate(condition = str_replace(condition, "24 hr 20˚ D wp0", "Dark")) %>%
+  mutate(group = str_replace(group, "24 hr 20˚ L wp0", "Light")) %>%
+  mutate(group = str_replace(group, "24 hr 20˚ D wp0", "Dark"))
 compare_sample
 ```
 
@@ -171,6 +177,8 @@ boxplot(compare_sdiv_normal_log)
 
 ## Calculate Dispersion Factors & Estimate Dispersions
 
+$Y = \beta_0 + \beta_1X_{STGL2} + \beta_2X_{STIN} + \beta_3X_{STTO-BH} + \beta_4X_{Light} + \beta_5X_{STGL2}X_{Light} + \beta_6X_{STIN}X_{Light} + \beta_7X_{STTO-BH}X_{Light} + \epsilon$
+
 ```{r make a model matrix}
 design <- model.matrix(~ population * condition, data = compare_sample)
 rownames(design) <- compare_sample$sample.description
@@ -199,8 +207,10 @@ plotBCV(dge_data)
 fit <- glmFit(dge_data, design)
 ```
 
+### All
+
 ```{r finding differentially expressed genes again}
-compare_lrt <- glmLRT(fit, coef = colnames(design[,-1:-4]))
+compare_lrt <- glmLRT(fit, coef = colnames(design[,-1]))
 ```
 
 ```{r view the differentially expressed genes again}
@@ -208,17 +218,65 @@ topTags(compare_lrt)
 ```
 
 ```{r summarise number of differentially expressed genes again}
-summary(decideTestsDGE(compare_lrt, p.value=0.01))
+#summary(decideTestsDGE(compare_lrt, p.value=0.01))
+summary(decideTests(compare_lrt, p.value=0.01))
+```
+
+### STGL2
+
+$Y = \beta_0 + \beta_1X_{Light} + \beta_2X_{STGL2}X_{Light} + \epsilon$
+
+```{r finding differentially expressed genes again}
+STGL2_compare_lrt <- glmLRT(fit, coef = colnames(design[, c(2, 5, 6)]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(STGL2_compare_lrt)
+```
+
+```{r summarise number of differentially expressed genes again}
+#summary(decideTestsDGE(STGL2_compare_lrt, p.value=0.01))
+summary(decideTests(STGL2_compare_lrt, p.value=0.01))
+```
+
+### STIN
+
+```{r finding differentially expressed genes again}
+STIN_compare_lrt <- glmLRT(fit, coef = colnames(design[, c(3, 5, 7)]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(STIN_compare_lrt)
+```
+
+```{r summarise number of differentially expressed genes again}
+#summary(decideTestsDGE(STIN_compare_lrt, p.value=0.01))
+summary(decideTests(STIN_compare_lrt, p.value=0.01))
+```
+
+### STTO-BH
+
+```{r finding differentially expressed genes again}
+STTO_BH_compare_lrt <- glmLRT(fit, coef = colnames(design[, c(4, 5, 8)]))
+```
+
+```{r view the differentially expressed genes again}
+topTags(STTO_BH_compare_lrt)
+```
+
+```{r summarise number of differentially expressed genes again}
+#summary(decideTestsDGE(STTO_BH_compare_lrt, p.value=0.01))
+summary(decideTests(STTO_BH_compare_lrt, p.value=0.01))
 ```
 
 ```{r extract genes with a FDR < 0.01 (could also use 0.05) and save to a file}
 DEgene_LD_compare <- topTags(compare_lrt, n = Inf, p.value = 0.01)$table
-write.csv(DEgene_LD_compare,"../output/DEgenes_LD_compare.csv")
+write.csv(DEgene_LD_compare,"../output/DEgenes_WP_compare.csv")
 ```
 
 ```{r or if you want to keep all of them}
 DEgene_LD_compare_all <- topTags(compare_lrt, n = Inf, p.value = 1)$table
-write.csv(DEgene_LD_compare_all,"../output/DEgenes_LD_compare_all.csv")
+write.csv(DEgene_LD_compare_all,"../output/DEgenes_WP_compare_all.csv")
 ```
 
 ## Box Plot Function
