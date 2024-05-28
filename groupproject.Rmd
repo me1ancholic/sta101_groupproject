@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Plant Pals Group Project"
 author: "Christina Chen"
 date: "2024-04-19"
 output: html_document
